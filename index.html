@@ -5,66 +5,161 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>生活記帳與記事提醒</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+        body { font-family: sans-serif; padding: 20px; background: #f5f5f5; max-width: 600px; margin: 0 auto; }
         .card { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input, select, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; }
-        button { background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        input, select, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .tabs { display: flex; margin-bottom: 10px; }
+        .tab-btn { background: #6c757d; margin: 0 2px; }
+        .tab-btn.active { background: #28a745; }
     </style>
 </head>
 <body>
 
     <h2>錢包與記事小管家</h2>
 
-    <!-- 記帳區塊 -->
+    <!-- 輸入區塊 -->
     <div class="card">
-        <h3>💰 記帳</h3>
-        <input type="text" id="accItem" placeholder="項目（例：午餐）">
-        <input type="number" id="accAmount" placeholder="金額">
-        <select id="accCategory">
-            <option value="餐飲">餐飲</option>
-            <option value="交通">交通</option>
-            <option value="娛樂">娛樂</option>
-            <option value="其他">其他</option>
-        </select>
-        <button onclick="sendAccounting()">送出記帳</button>
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchForm('acc')">💰 我要記帳</button>
+            <button class="tab-btn" onclick="switchForm('rem')">⏰ 設定提醒</button>
+        </div>
+
+        <!-- 記帳表單 -->
+        <div id="accForm">
+            <input type="text" id="accItem" placeholder="項目（例：午餐）">
+            <input type="number" id="accAmount" placeholder="金額">
+            <select id="accCategory">
+                <option value="餐飲">餐飲</option>
+                <option value="交通">交通</option>
+                <option value="娛樂">娛樂</option>
+                <option value="其他">其他</option>
+            </select>
+            <button onclick="sendAccounting()">送出記帳</button>
+        </div>
+
+        <!-- 提醒表單 -->
+        <div id="remForm" style="display:none;">
+            <input type="text" id="remContent" placeholder="提醒內容（例：繳電費）">
+            <input type="datetime-local" id="remTime">
+            <button onclick="sendReminder()">儲存提醒</button>
+        </div>
     </div>
 
-    <!-- 提醒記事區塊 -->
+    <!-- 歷史資料顯示區塊 -->
     <div class="card">
-        <h3>⏰ 記事提醒</h3>
-        <input type="text" id="remContent" placeholder="提醒內容（例：繳電費）">
-        <input type="datetime-local" id="remTime">
-        <button onclick="sendReminder()">設定提醒</button>
+        <h3>📊 歷史紀錄與待辦事項</h3>
+        <button onclick="fetchData()" style="background: #17a2b8; margin-bottom: 10px;">🔄 重新整理資料</button>
+        
+        <h4>💰 最近花費</h4>
+        <div style="overflow-x:auto;">
+            <table id="accTable">
+                <thead><tr><th>時間</th><th>項目</th><th>金額</th><th>分類</th></tr></thead>
+                <tbody><tr><td colspan="4" style="text-align:center;">載入中...</td></tr></tbody>
+            </table>
+        </div>
+
+        <h4>⏰ 記事提醒列表</h4>
+        <div style="overflow-x:auto;">
+            <table id="remTable">
+                <thead><tr><th>建立時間</th><th>提醒內容</th><th>提醒時間</th><th>狀態</th></tr></thead>
+                <tbody><tr><td colspan="4" style="text-align:center;">載入中...</td></tr></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
-        // 填入剛才從 Google Apps Script 複製的網頁應用程式網址
+        // ⚠️ 務必填入你從 Google Apps Script 複製的網頁應用程式網址
         const API_URL = "你的_GOOGLE_APPS_SCRIPT_網頁應用程式網址";
 
+        // 切換表單
+        function switchForm(type) {
+            const btn = document.querySelectorAll('.tab-btn');
+            if(type === 'acc') {
+                document.getElementById('accForm').style.display = 'block';
+                document.getElementById('remForm').style.display = 'none';
+                btn[0].classList.add('active'); btn[1].classList.remove('active');
+            } else {
+                document.getElementById('accForm').style.display = 'none';
+                document.getElementById('remForm').style.display = 'block';
+                btn[0].classList.remove('active'); btn[1].classList.add('active');
+            }
+        }
+
+        // 送出記帳
         function sendAccounting() {
+            const item = document.getElementById('accItem').value;
+            const amount = document.getElementById('accAmount').value;
+            if(!item || !amount) return alert('請填寫完整項目與金額');
+            
             const data = {
                 type: "accounting",
-                item: document.getElementById('accItem').value,
-                amount: document.getElementById('accAmount').value,
+                item: item,
+                amount: amount,
                 category: document.getElementById('accCategory').value
             };
             
             fetch(API_URL, { method: "POST", body: JSON.stringify(data) })
             .then(res => res.json())
-            .then(res => { alert(res.message); location.reload(); });
+            .then(res => { alert(res.message); clearInputs(); fetchData(); });
         }
 
+        // 送出提醒
         function sendReminder() {
+            const content = document.getElementById('remContent').value;
+            const time = document.getElementById('remTime').value;
+            if(!content || !time) return alert('請填寫完整內容與提醒時間');
+
             const data = {
                 type: "reminder",
-                content: document.getElementById('remContent').value,
-                remindTime: document.getElementById('remTime').value
+                content: content,
+                remindTime: time.replace('T', ' ')
             };
             
             fetch(API_URL, { method: "POST", body: JSON.stringify(data) })
             .then(res => res.json())
-            .then(res => { alert(res.message); location.reload(); });
+            .then(res => { alert(res.message); clearInputs(); fetchData(); });
         }
+
+        // 從試算表讀取資料並顯示
+        function fetchData() {
+            fetch(API_URL)
+            .then(res => res.json())
+            .then(data => {
+                // 渲染記帳表格
+                const accBody = document.querySelector('#accTable tbody');
+                accBody.innerHTML = data.accounting.length ? '' : '<tr><td colspan="4" style="text-align:center;">暫無資料</td></tr>';
+                data.accounting.reverse().slice(0, 10).forEach(row => { // 只顯示最新10筆
+                    let date = new Date(row[0]).toLocaleDateString();
+                    accBody.innerHTML += `<tr><td>${date}</td><td>${row[1]}</td><td>$${row[2]}</td><td>${row[3]}</td></tr>`;
+                });
+
+                // 渲染提醒表格
+                const remBody = document.querySelector('#remTable tbody');
+                remBody.innerHTML = data.reminders.length ? '' : '<tr><td colspan="4" style="text-align:center;">暫無資料</td></tr>';
+                data.reminders.reverse().slice(0, 10).forEach(row => {
+                    let date = new Date(row[0]).toLocaleDateString();
+                    remBody.innerHTML += `<tr><td>${date}</td><td>${row[1]}</td><td>${row[2]}</td><td>${row[3]}</td></tr>`;
+                });
+            }).catch(err => {
+                console.error(err);
+                alert('資料載入失敗，請檢查 API 網址或試算表權限！');
+            });
+        }
+
+        function clearInputs() {
+            document.getElementById('accItem').value = '';
+            document.getElementById('accAmount').value = '';
+            document.getElementById('remContent').value = '';
+            document.getElementById('remTime').value = '';
+        }
+
+        // 網頁開啟時自動讀取一次
+        window.onload = fetchData;
     </script>
 </body>
 </html>
