@@ -13,9 +13,6 @@
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
-        .tabs { display: flex; margin-bottom: 10px; }
-        .tab-btn { background: #6c757d; margin: 0 2px; }
-        .tab-btn.active { background: #28a745; }
         .stat-box { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin-top: 10px; }
         .stat-item { background: #e9ecef; padding: 10px; border-radius: 5px; width: 48%; box-sizing: border-box; font-size: 14px; }
         .stat-amount { color: #dc3545; font-weight: bold; font-size: 16px; display: block; margin-top: 5px; }
@@ -27,51 +24,40 @@
 
     <!-- 輸入區塊 -->
     <div class="card">
-        <div class="tabs">
-            <button class="tab-btn active" id="btnAcc" onclick="switchForm('acc')">💰 我要記帳</button>
-            <button class="tab-btn" id="btnRem" onclick="switchForm('rem')">⏰ 設定提醒</button>
-        </div>
-
-        <!-- 記帳表單 -->
-        <div id="accForm">
-            <input type="text" id="accItem" placeholder="項目（例：午餐）">
-            <input type="number" id="accAmount" placeholder="金額">
-            <select id="accCategory">
-                <option value="餐飲">餐飲</option>
-                <option value="交通">交通</option>
-                <option value="娛樂">娛樂</option>
-                <option value="其他">其他</option>
-            </select>
-            <!-- 這裡變成動態載入的下拉選單 -->
-            <select id="accPayment">
-                <option value="">載入支付方式中...</option>
-            </select>
-            <button onclick="sendAccounting()">送出記帳</button>
-        </div>
-
-        <!-- 提醒表單 -->
-        <div id="remForm" style="display:none;">
-            <input type="text" id="remContent" placeholder="提醒內容（例：繳電費）">
-            <input type="datetime-local" id="remTime">
-            <button onclick="sendReminder()">儲存提醒</button>
-        </div>
+        <h3>💰 我要記帳</h3>
+        <input type="text" id="accItem" placeholder="項目（例：午餐）">
+        <input type="number" id="accAmount" placeholder="金額">
+        <select id="accCategory">
+            <option value="餐飲">餐飲</option>
+            <option value="交通">交通</option>
+            <option value="娛樂">娛樂</option>
+            <option value="其他">其他</option>
+        </select>
+        <select id="accPayment">
+            <option value="現金/常規">現金/常規</option>
+            <option value="街口支付/匯豐">街口支付/匯豐</option>
+            <option value="街口支付/玉山">街口支付/玉山</option>
+            <option value="LINEPAY/玉山">LINEPAY/玉山</option>
+            <option value="LINEPAY/樂天">LINEPAY/樂天</option>
+        </select>
+        <button onclick="sendAccounting()">送出記帳</button>
     </div>
 
-    <!-- 動態應付帳單統計區塊 -->
+    <!-- 應付帳單統計區塊 -->
     <div class="card">
-        <h3>💳 當期應付帳單預估</h3>
-        <p style="font-size:12px; color:#666; margin:0;">根據您在試算表設定的結帳日自動計算：</p>
-        <div class="stat-box" id="billingDashboard">
-            <!-- 這裡會根據試算表卡片清單自動長出來 -->
+        <h3>💳 各支付方式累積金額統計</h3>
+        <div class="stat-box">
+            <div class="stat-item">街口/匯豐 <span class="stat-amount" id="sum-hsbc">\$0</span></div>
+            <div class="stat-item">街口/玉山 <span class="stat-amount" id="sum-esun">\$0</span></div>
+            <div class="stat-item">LINEPAY/玉山 <span class="stat-amount" id="sum-lpesun">\$0</span></div>
+            <div class="stat-item">LINEPAY/樂天 <span class="stat-amount" id="sum-lprk">\$0</span></div>
         </div>
     </div>
 
     <!-- 歷史資料顯示區塊 -->
     <div class="card">
-        <h3>📊 歷史紀錄與待辦事項</h3>
+        <h3>📊 最近 10 筆花費紀錄</h3>
         <button onclick="fetchData()" style="background: #17a2b8; margin-bottom: 10px;">🔄 重新整理資料</button>
-        
-        <h4>💰 最近花費</h4>
         <div style="overflow-x:auto;">
             <table id="accTable">
                 <thead><tr><th>時間</th><th>項目</th><th>金額</th><th>分類</th><th>支付方式</th></tr></thead>
@@ -82,36 +68,18 @@
 
     <script>
         const API_URL = "https://google.com";
-        
-        // 全局儲存支付方式與結帳日的對照表
-        let paymentRules = {}; 
-
-        function switchForm(type) {
-            if(type === 'acc') {
-                document.getElementById('accForm').style.display = 'block';
-                document.getElementById('remForm').style.display = 'none';
-                document.getElementById('btnAcc').classList.add('active');
-                document.getElementById('btnRem').classList.remove('active');
-            } else {
-                document.getElementById('accForm').style.display = 'none';
-                document.getElementById('remForm').style.display = 'block';
-                document.getElementById('btnAcc').classList.remove('active');
-                document.getElementById('btnRem').classList.add('active');
-            }
-        }
 
         function sendAccounting() {
             const item = document.getElementById('accItem').value;
             const amount = document.getElementById('accAmount').value;
-            const payment = document.getElementById('accPayment').value;
-            if(!item || !amount || !payment) return alert('請填寫完整欄位');
+            if(!item || !amount) return alert('請填寫完整項目與金額');
             
             const data = {
                 type: "accounting",
                 item: item,
                 amount: Number(amount),
                 category: document.getElementById('accCategory').value,
-                payment: payment
+                payment: document.getElementById('accPayment').value
             };
             
             fetch(API_URL, { method: "POST", body: JSON.stringify(data) })
@@ -119,90 +87,48 @@
             .then(res => { alert(res.message); clearInputs(); fetchData(); });
         }
 
-        function isCurrentBillingCycle(consumeDateStr, closingDay) {
-            if (!closingDay || closingDay === 0) return false; // 0日不統計帳單
-            let now = new Date();
-            let consumeDate = new Date(consumeDateStr);
-            let currentBillingStart, currentBillingEnd;
-            
-            if (now.getDate() > closingDay) {
-                currentBillingStart = new Date(now.getFullYear(), now.getMonth(), closingDay + 1);
-                currentBillingEnd = new Date(now.getFullYear(), now.getMonth() + 1, closingDay);
-            } else {
-                currentBillingStart = new Date(now.getFullYear(), now.getMonth() - 1, closingDay + 1);
-                currentBillingEnd = new Date(now.getFullYear(), now.getMonth(), closingDay);
-            }
-            currentBillingStart.setHours(0,0,0,0);
-            currentBillingEnd.setHours(23,59,59,999);
-            
-            return consumeDate >= currentBillingStart && consumeDate <= currentBillingEnd;
-        }
-
         function fetchData() {
             fetch(API_URL)
             .then(res => res.json())
             .then(data => {
-                // 1. 先處理動態支付選項與看板初始化
-                const paySelect = document.getElementById('accPayment');
-                const dashboard = document.getElementById('billingDashboard');
-                paySelect.innerHTML = '';
-                dashboard.innerHTML = '';
-                paymentRules = {};
-                let sums = {};
-
-                if (data.payments && data.payments.length) {
-                    data.payments.forEach(p => {
-                        let name = p[0];
-                        let closingDay = Number(p[1]);
-                        paymentRules[name] = closingDay; // 記錄規則
-
-                        // 加進下拉選單
-                        let optText = closingDay > 0 ? `${name} (${closingDay}日結)` : name;
-                        paySelect.innerHTML += `<option value="${name}">${optText}</option>`;
-
-                        // 如果需要統計，在看板建立格子
-                        if (closingDay > 0) {
-                            sums[name] = 0;
-                            dashboard.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="sum-${btoa(name).replace(/=/g,'')}">$0</span></div>`;
-                        }
-                    });
-                } else {
-                    paySelect.innerHTML = '<option value="現金/不統計">現金/不統計</option>';
-                }
-
-                // 2. 處理記帳花費統計
+                let sums = { "街口支付/匯豐": 0, "街口支付/玉山": 0, "LINEPAY/玉山": 0, "LINEPAY/樂天": 0 };
                 const accBody = document.querySelector('#accTable tbody');
-                accBody.innerHTML = data.accounting.length ? '' : '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
                 
+                if (!data.accounting || !data.accounting.length) {
+                    accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
+                    return;
+                }
+                
+                accBody.innerHTML = '';
+                
+                // 累加所有歷史金額
                 data.accounting.forEach(row => {
-                    let dateStr = row[0];
-                    let amount = Number(row[2]);
-                    let paymentType = row[4] || "現金/不統計";
-
+                    let amount = Number(row[2]) || 0;
+                    let paymentType = row[4] || "現金/常規";
                     if (paymentType in sums) {
-                        let closingDay = paymentRules[paymentType];
-                        if (isCurrentBillingCycle(dateStr, closingDay)) {
-                            sums[paymentType] += amount;
-                        }
+                        sums[paymentType] += amount;
                     }
                 });
 
-                // 更新動態看板金額
-                Object.keys(sums).forEach(name => {
-                    let id = `sum-${btoa(name).replace(/=/g,'')}`;
-                    let element = document.getElementById(id);
-                    if (element) element.innerText = `$${sums[name]}`;
-                });
+                // 更新看板
+                document.getElementById('sum-hsbc').innerText = `$${sums["街口支付/匯豐"]}`;
+                document.getElementById('sum-esun').innerText = `$${sums["街口支付/玉山"]}`;
+                document.getElementById('sum-lpesun').innerText = `$${sums["LINEPAY/玉山"]}`;
+                document.getElementById('sum-lprk').innerText = `$${sums["LINEPAY/樂天"]}`;
 
-                // 3. 渲染最近 10 筆明細表格
-                data.accounting.reverse().slice(0, 10).forEach(row => {
-                    let date = new Date(row[0]).toLocaleDateString();
-                    let paymentType = row[4] || "現金/不統計";
-                    accBody.innerHTML += `<tr><td>${date}</td><td>${row[1]}</td><td>$${row[2]}</td><td>${row[3]}</td><td>${paymentType}</td></tr>`;
+                // 顯示最新的 10 筆明細
+                let renderRows = [...data.accounting].reverse().slice(0, 10);
+                renderRows.forEach(row => {
+                    let date = row[0] ? new Date(row[0]).toLocaleDateString() : '無時間';
+                    let item = row[1] || '未命名';
+                    let amount = row[2] || 0;
+                    let cat = row[3] || '其他';
+                    let pay = row[4] || '現金/常規';
+                    accBody.innerHTML += `<tr><td>${date}</td><td>${item}</td><td>$${amount}</td><td>${cat}</td><td>${pay}</td></tr>`;
                 });
             }).catch(err => {
                 console.error(err);
-                alert('資料載入失敗，請確認試算表分頁設定！');
+                alert('資料解析失敗，請重新整理網頁！');
             });
         }
 
