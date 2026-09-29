@@ -21,21 +21,33 @@
 
     <h2>錢包與記事小管家</h2>
 
-    <!-- 記帳輸入區 -->
+    <!-- 隱藏的傳輸通道：用來防止網頁送出後亂跳轉 -->
+    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted){alert('記帳請求已送出！請等待約5秒後手動點擊下方刷新資料按鈕。');clearInputs();submitted=false;}"></iframe>
+
+    <!-- 記帳輸入區：改用傳統表單傳輸，強行突破瀏覽器安全牆 -->
     <div class="card">
         <h3>💰 我要記帳</h3>
-        <input type="text" id="accItem" placeholder="項目（例：午餐）">
-        <input type="number" id="accAmount" placeholder="金額">
-        <select id="accCategory">
-            <option value="餐飲">餐飲</option>
-            <option value="交通">交通</option>
-            <option value="娛樂">娛樂</option>
-            <option value="其他">其他</option>
-        </select>
-        <select id="accPayment">
-            <option value="現金/常規">現金/常規</option>
-        </select>
-        <button onclick="sendAccounting()">送出記帳</button>
+        <form action="https://google.com" method="POST" target="hidden_iframe" onsubmit="submitted=true;">
+            
+            <!-- 固定傳送類別參數給 GAS -->
+            <input type="hidden" name="type" value="accounting">
+
+            <input type="text" name="item" id="accItem" placeholder="項目（例：午餐）" required>
+            <input type="number" name="amount" id="accAmount" placeholder="金額" required>
+            
+            <select name="category">
+                <option value="餐飲">餐飲</option>
+                <option value="交通">交通</option>
+                <option value="娛樂">娛樂</option>
+                <option value="其他">其他</option>
+            </select>
+            
+            <select name="payment" id="accPayment">
+                <option value="現金/常規">現金/常規</option>
+            </select>
+            
+            <button type="submit">送出記帳</button>
+        </form>
     </div>
 
     <!-- 支付方式累計統計 -->
@@ -53,35 +65,15 @@
         <div style="overflow-x:auto;">
             <table id="accTable">
                 <thead><tr><th>時間</th><th>項目</th><th>金額</th><th>分類</th><th>支付方式</th></tr></thead>
-                <tbody><tr><td colspan="5" style="text-align:center;">載入中...</td></tr></tbody>
+                <tbody><tr><td colspan="5" style="text-align:center;">連線就緒，請嘗試送出第一筆記帳。</td></tr></tbody>
             </table>
         </div>
     </div>
 
     <script>
-        // 自動鎖定最正確的後端連線 API
         const API_URL = "https://google.com";
+        let submitted = false;
 
-        // 送出記帳資料
-        function sendAccounting() {
-            const item = document.getElementById('accItem').value;
-            const amount = document.getElementById('accAmount').value;
-            if(!item || !amount) return alert('請填寫項目與金額');
-            
-            const data = {
-                type: "accounting",
-                item: item,
-                amount: Number(amount),
-                category: document.getElementById('accCategory').value,
-                payment: document.getElementById('accPayment').value
-            };
-            
-            fetch(API_URL, { method: "POST", body: JSON.stringify(data) })
-            .then(res => res.json())
-            .then(res => { alert(res.message); clearInputs(); fetchData(); });
-        }
-
-        // 從雲端抓取並動態渲染網頁
         function fetchData() {
             fetch(API_URL)
             .then(res => res.json())
@@ -97,7 +89,7 @@
                     paySelect.innerHTML = '';
                     statBox.innerHTML = '';
                     data.payments.forEach((p, index) => {
-                        let name = p && p[0] ? p[0].toString().trim() : "";
+                        let name = p && p ? p.toString().trim() : "";
                         if(name === "") return;
                         
                         sums[name] = 0;
@@ -110,8 +102,8 @@
                 if (data && data.accounting && data.accounting.length > 0) {
                     data.accounting.forEach(row => {
                         if (!row || row.length < 3) return;
-                        let amount = Number(row[2]) || 0;
-                        let payType = row[4] ? row[4].toString().trim() : "現金/常規";
+                        let amount = Number(row) || 0;
+                        let payType = row ? row.toString().trim() : "現金/常規";
                         if (payType in sums) {
                             sums[payType] += amount;
                         }
@@ -120,7 +112,7 @@
                     // 刷新方塊金額
                     if (data.payments) {
                         data.payments.forEach((p, index) => {
-                            let name = p && p[0] ? p[0].toString().trim() : "";
+                            let name = p && p ? p.toString().trim() : "";
                             let el = document.getElementById(`box-${index}`);
                             if (el && name in sums) el.innerText = `$${sums[name]}`;
                         });
@@ -130,15 +122,14 @@
                     accBody.innerHTML = '';
                     let renderRows = [...data.accounting].reverse().slice(0, 10);
                     renderRows.forEach(row => {
-                        let date = row[0] ? new Date(row[0]).toLocaleDateString() : '無時間';
-                        accBody.innerHTML += `<tr><td>${date}</td><td>${row[1]||'未命名'}</td><td>$${row[2]||0}</td><td>${row[3]||'其他'}</td><td>${row[4]||'現金/常規'}</td></tr>`;
+                        let date = row ? new Date(row).toLocaleDateString() : '無時間';
+                        accBody.innerHTML += `<tr><td>${date}</td><td>${row||'未命名'}</td><td>$${row||0}</td><td>${row||'其他'}</td><td>${row||'現金/常規'}</td></tr>`;
                     });
                 } else {
                     accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無歷史記帳資料</td></tr>';
                 }
             }).catch(err => {
                 console.log(err);
-                document.querySelector('#accTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">連線就緒，請送出第一筆記帳。</td></tr>';
             });
         }
 
