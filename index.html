@@ -25,18 +25,18 @@
 
     <h2>錢包與記事小管家</h2>
 
-    <!-- 跨網域傳輸隱形管道 -->
-    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted){alert('資料已傳送到雲端！請等待約3秒後手動點擊重新整理。');clearInputs();submitted=false;fetchData();}"></iframe>
+    <!-- 傳輸專用隱形管道 -->
+    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted){alert('資料已成功推送到雲端！請等待約3秒後手動點擊下方重新整理按鈕。');clearInputs();submitted=false;fetchData();}"></iframe>
 
     <div class="card">
-        <!-- 兩個核心功能分頁（絕不丟失） -->
+        <!-- 核心功能分頁 -->
         <div class="tabs">
             <button class="tab-btn active" id="btnAcc" onclick="switchForm('acc')">💰 我要記帳</button>
             <button class="tab-btn" id="btnRem" onclick="switchForm('rem')">⏰ 記事提醒</button>
         </div>
 
-        <!-- 表單一：我要記帳 -->
-        <form id="accForm" action="https://google.com" method="POST" target="hidden_iframe" onsubmit="submitted=true;">
+        <!-- 表單：我要記帳（第 39 行已修正正確網址） -->
+        <form id="accForm" action="https://script.google.com/macros/s/AKfycbxmPpAw6_1ASJeaXRFH9wPQ36Ywc0nWVYpUlXD2CQVQa49Pk_SjNqxsvG1wNkkGy8KlMw/exec" method="POST" target="hidden_iframe" onsubmit="submitted=true;">
             <input type="hidden" name="type" value="accounting">
             <input type="text" name="item" id="accItem" placeholder="項目（例：午餐）" required>
             <input type="number" name="amount" id="accAmount" placeholder="金額" required>
@@ -47,7 +47,6 @@
                 <option value="其他">其他</option>
             </select>
             <select name="payment" id="accPayment">
-                <!-- 內建保底卡片清單（絕不只有現金） -->
                 <option value="現金/常規">現金/常規</option>
                 <option value="街口支付/匯豐">街口支付/匯豐</option>
                 <option value="街口支付/玉山">街口支付/玉山</option>
@@ -57,8 +56,8 @@
             <button type="submit">送出記帳</button>
         </form>
 
-        <!-- 表單二：記事提醒 -->
-        <form id="remForm" action="https://google.com" method="POST" target="hidden_iframe" onsubmit="submitted=true;" style="display:none;">
+        <!-- 表單：記事提醒（第 59 行已修正正確網址） -->
+        <form id="remForm" action="https://script.google.com/macros/s/AKfycbxmPpAw6_1ASJeaXRFH9wPQ36Ywc0nWVYpUlXD2CQVQa49Pk_SjNqxsvG1wNkkGy8KlMw/exec" method="POST" target="hidden_iframe" onsubmit="submitted=true;" style="display:none;">
             <input type="hidden" name="type" value="reminder">
             <input type="text" name="content" id="remContent" placeholder="提醒內容（例：繳電費）" required>
             <input type="datetime-local" name="remindTime" id="remTime" required>
@@ -66,18 +65,18 @@
         </form>
     </div>
 
-    <!-- 累積金額統計 -->
+    <!-- 各支付累積金額統計 -->
     <div class="card">
         <h3>💳 各支付方式累積金額統計</h3>
         <div class="stat-box" id="dynamic-stat-box">
-            <div class="stat-item">街口/匯豐 <span class="stat-amount" id="sum-box-0">\$0</span></div>
-            <div class="stat-item">街口/玉山 <span class="stat-amount" id="sum-box-1">\$0</span></div>
-            <div class="stat-item">LINEPAY/玉山 <span class="stat-amount" id="sum-box-2">\$0</span></div>
-            <div class="stat-item">LINEPAY/樂天 <span class="stat-amount" id="sum-box-3">\$0</span></div>
+            <div class="stat-item">街口/匯豐 <span class="stat-amount" id="sum-box-0">$0</span></div>
+            <div class="stat-item">街口/玉山 <span class="stat-amount" id="sum-box-1">$0</span></div>
+            <div class="stat-item">LINEPAY/玉山 <span class="stat-amount" id="sum-box-2">$0</span></div>
+            <div class="stat-item">LINEPAY/樂天 <span class="stat-amount" id="sum-box-3">$0</span></div>
         </div>
     </div>
 
-    <!-- 明細歷史列表 -->
+    <!-- 歷史花費與待辦提醒列表 -->
     <div class="card">
         <h3>📊 歷史紀錄與待辦事項</h3>
         <button onclick="fetchData()" style="background: #17a2b8; margin-bottom: 10px;">🔄 重新整理資料</button>
@@ -100,7 +99,7 @@
     </div>
 
     <script>
-        const API_URL = "https://google.com";
+        const API_URL = "https://script.google.com/macros/s/AKfycbxmPpAw6_1ASJeaXRFH9wPQ36Ywc0nWVYpUlXD2CQVQa49Pk_SjNqxsvG1wNkkGy8KlMw/exec";
         let submitted = false;
 
         function switchForm(type) {
@@ -117,6 +116,16 @@
             }
         }
 
+        function getSafeId(str) {
+            let s = String(str).trim();
+            let hash = 0;
+            for (let i = 0; i < s.length; i++) {
+                hash = (hash << 5) - hash + s.charCodeAt(i);
+                hash |= 0;
+            }
+            return "boxid-" + Math.abs(hash);
+        }
+
         function fetchData() {
             fetch(API_URL)
             .then(res => res.json())
@@ -128,21 +137,34 @@
                 
                 let sums = { "街口支付/匯豐": 0, "街口支付/玉山": 0, "LINEPAY/玉山": 0, "LINEPAY/樂天": 0 };
                 
-                // 1. 如果雲端有自訂卡片，自動覆蓋並渲染
+                // 1. 動態加載卡片清單（保底清單同時存在）
                 if (data && data.payments && data.payments.length > 0) {
                     paySelect.innerHTML = '';
                     statBox.innerHTML = '';
                     sums = {};
-                    data.payments.forEach((p, index) => {
+                    data.payments.forEach(p => {
                         let name = p && p ? p.toString().trim() : "";
                         if(name === "") return;
+                        
                         sums[name] = 0;
                         paySelect.innerHTML += `<option value="${name}">${name}</option>`;
-                        statBox.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="sum-box-${index}">$0</span></div>`;
+                        let safeId = getSafeId(name);
+                        statBox.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="${safeId}">$0</span></div>`;
                     });
                 }
 
-                // 2. 統計記帳資料
+                if (paySelect.innerHTML === '') {
+                    // 若雲端尚未加載完成，顯示固定選單
+                    paySelect.innerHTML = `
+                        <option value="現金/常規">現金/常規</option>
+                        <option value="街口支付/匯豐">街口支付/匯豐</option>
+                        <option value="街口支付/玉山">街口支付/玉山</option>
+                        <option value="LINEPAY/玉山">LINEPAY/玉山</option>
+                        <option value="LINEPAY/樂天">LINEPAY/樂天</option>
+                    `;
+                }
+
+                // 2. 統計記帳消費
                 if (data && data.accounting && data.accounting.length > 0) {
                     data.accounting.forEach(row => {
                         if (!row || row.length < 3) return;
@@ -152,13 +174,13 @@
                     });
 
                     // 刷新方塊金額
-                    let keys = Object.keys(sums);
-                    keys.forEach((name, index) => {
-                        let el = document.getElementById(`sum-box-${index}`);
+                    Object.keys(sums).forEach((name, index) => {
+                        let safeId = getSafeId(name);
+                        let el = document.getElementById(safeId) || document.getElementById(`sum-box-${index}`);
                         if (el) el.innerText = `$${sums[name]}`;
                     });
 
-                    // 渲染記帳表格明細
+                    // 渲染記帳表格
                     accBody.innerHTML = '';
                     let renderRows = [...data.accounting].reverse().slice(0, 10);
                     renderRows.forEach(row => {
@@ -172,25 +194,3 @@
                 // 3. 渲染提醒記事表格
                 if (data && data.reminders && data.reminders.length > 0) {
                     remBody.innerHTML = '';
-                    let renderRem = [...data.reminders].reverse().slice(0, 10);
-                    renderRem.forEach(row => {
-                        let date = row ? new Date(row).toLocaleDateString() : '無時間';
-                        remBody.innerHTML += `<tr><td>${date}</td><td>${row||'無內容'}</td><td>${row||'無時間'}</td><td>${row||'未完成'}</td></tr>`;
-                    });
-                } else {
-                    remBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暫無提醒記事事項</td></tr>';
-                }
-            }).catch(err => { console.log("等待初始化中:", err); });
-        }
-
-        function clearInputs() {
-            document.getElementById('accItem').value = '';
-            document.getElementById('accAmount').value = '';
-            document.getElementById('remContent').value = '';
-            document.getElementById('remTime').value = '';
-        }
-
-        window.onload = fetchData;
-    </script>
-</body>
-</html>
