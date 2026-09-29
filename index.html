@@ -3,15 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>生活記帳小管家</title>
+    <title>生活記帳與提醒管家</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #f5f5f5; max-width: 600px; margin: 0 auto; }
         .card { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         input, select, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
         button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
+        .tabs { display: flex; margin-bottom: 15px; }
+        .tab-btn { background: #6c757d; margin: 0 2px; width: 50%; }
+        .tab-btn.active { background: #28a745; }
         .stat-box { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; margin-top: 10px; }
         .stat-item { background: #e9ecef; padding: 10px; border-radius: 5px; width: 48%; box-sizing: border-box; font-size: 14px; }
         .stat-amount { color: #dc3545; font-weight: bold; font-size: 16px; display: block; margin-top: 5px; }
@@ -21,51 +25,68 @@
 
     <h2>錢包與記事小管家</h2>
 
-    <!-- 隱藏的傳輸通道：用來防止網頁送出後亂跳轉 -->
-    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted){alert('記帳請求已送出！請等待約5秒後手動點擊下方刷新資料按鈕。');clearInputs();submitted=false;}"></iframe>
+    <!-- 傳輸專用隱形管道 -->
+    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted){alert('資料已成功推送到雲端！請等待約3秒後手動點擊下方重新整理按鈕。');clearInputs();submitted=false;}"></iframe>
 
-    <!-- 記帳輸入區：改用傳統表單傳輸，強行突破瀏覽器安全牆 -->
     <div class="card">
-        <h3>💰 我要-記帳</h3>
-        <form action="https://google.com" method="POST" target="hidden_iframe" onsubmit="submitted=true;">
-            
-            <!-- 固定傳送類別參數給 GAS -->
-            <input type="hidden" name="type" value="accounting">
+        <!-- 頁籤切換：功能回歸！ -->
+        <div class="tabs">
+            <button class="tab-btn active" id="btnAcc" onclick="switchForm('acc')">💰 我要--記帳</button>
+            <button class="tab-btn" id="btnRem" onclick="switchForm('rem')">⏰ 記事提醒</button>
+        </div>
 
+        <!-- 表單：我要記帳 -->
+        <form id="accForm" action="https://google.com" method="POST" target="hidden_iframe" onsubmit="submitted=true;">
+            <input type="hidden" name="type" value="accounting">
             <input type="text" name="item" id="accItem" placeholder="項目（例：午餐）" required>
             <input type="number" name="amount" id="accAmount" placeholder="金額" required>
-            
             <select name="category">
                 <option value="餐飲">餐飲</option>
                 <option value="交通">交通</option>
                 <option value="娛樂">娛樂</option>
                 <option value="其他">其他</option>
             </select>
-            
             <select name="payment" id="accPayment">
                 <option value="現金/常規">現金/常規</option>
             </select>
-            
             <button type="submit">送出記帳</button>
+        </form>
+
+        <!-- 表單：記事提醒（回歸！） -->
+        <form id="remForm" action="https://google.com" method="POST" target="hidden_iframe" onsubmit="submitted=true;" style="display:none;">
+            <input type="hidden" name="type" value="reminder">
+            <input type="text" name="content" id="remContent" placeholder="提醒內容（例：繳電費）" required>
+            <input type="datetime-local" name="remindTime" id="remTime" required>
+            <button type="submit">儲存提醒記事</button>
         </form>
     </div>
 
-    <!-- 支付方式累計統計 -->
+    <!-- 各支付累積金額統計 -->
     <div class="card">
         <h3>💳 各支付方式累積金額統計</h3>
         <div class="stat-box" id="dynamic-stat-box">
-            <div style="color: gray; font-size: 14px;">暫無統計項目</div>
+            <div style="color: gray; font-size: 14px;">載入統計項目中...</div>
         </div>
     </div>
 
-    <!-- 歷史紀錄列表 -->
+    <!-- 歷史花費與待辦提醒列表 -->
     <div class="card">
-        <h3>📊 最近 10 筆花費紀錄</h3>
+        <h3>📊 歷史紀錄與待辦事項</h3>
         <button onclick="fetchData()" style="background: #17a2b8; margin-bottom: 10px;">🔄 重新整理資料</button>
+        
+        <h4>💰 最近花費</h4>
         <div style="overflow-x:auto;">
             <table id="accTable">
                 <thead><tr><th>時間</th><th>項目</th><th>金額</th><th>分類</th><th>支付方式</th></tr></thead>
-                <tbody><tr><td colspan="5" style="text-align:center;">連線就緒，請嘗試送出第一筆記帳。</td></tr></tbody>
+                <tbody><tr><td colspan="5" style="text-align:center;">載入中...</td></tr></tbody>
+            </table>
+        </div>
+
+        <h4>⏰ 記事提醒列表</h4>
+        <div style="overflow-x:auto;">
+            <table id="remTable">
+                <thead><tr><th>建立時間</th><th>提醒內容</th><th>提醒時間</th><th>狀態</th></tr></thead>
+                <tbody><tr><td colspan="4" style="text-align:center;">載入中...</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -74,6 +95,30 @@
         const API_URL = "https://google.com";
         let submitted = false;
 
+        function switchForm(type) {
+            if(type === 'acc') {
+                document.getElementById('accForm').style.display = 'block';
+                document.getElementById('remForm').style.display = 'none';
+                document.getElementById('btnAcc').classList.add('active');
+                document.getElementById('btnRem').classList.remove('active');
+            } else {
+                document.getElementById('accForm').style.display = 'none';
+                document.getElementById('remForm').style.display = 'block';
+                document.getElementById('btnAcc').classList.remove('active');
+                document.getElementById('btnRem').classList.add('active');
+            }
+        }
+
+        function getSafeId(str) {
+            let s = String(str).trim();
+            let hash = 0;
+            for (let i = 0; i < s.length; i++) {
+                hash = (hash << 5) - hash + s.charCodeAt(i);
+                hash |= 0;
+            }
+            return "boxid-" + Math.abs(hash);
+        }
+
         function fetchData() {
             fetch(API_URL)
             .then(res => res.json())
@@ -81,44 +126,46 @@
                 const paySelect = document.getElementById('accPayment');
                 const statBox = document.getElementById('dynamic-stat-box');
                 const accBody = document.querySelector('#accTable tbody');
+                const remBody = document.querySelector('#remTable tbody');
                 
                 let sums = {};
                 
-                // 1. 生成自訂支付下拉選單與統計方塊
+                // 1. 載入卡片清單
                 if (data && data.payments && data.payments.length > 0) {
                     paySelect.innerHTML = '';
                     statBox.innerHTML = '';
-                    data.payments.forEach((p, index) => {
+                    data.payments.forEach(p => {
                         let name = p && p ? p.toString().trim() : "";
                         if(name === "") return;
                         
                         sums[name] = 0;
                         paySelect.innerHTML += `<option value="${name}">${name}</option>`;
-                        statBox.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="box-${index}">$0</span></div>`;
+                        let safeId = getSafeId(name);
+                        statBox.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="${safeId}">$0</span></div>`;
                     });
                 }
 
-                // 2. 統計歷史消費
+                if (paySelect.innerHTML === '') {
+                    paySelect.innerHTML = '<option value="現金/常規">現金/常規</option>';
+                    statBox.innerHTML = '<div style="color:gray; font-size:14px;">暫無卡片統計</div>';
+                }
+
+                // 2. 統計記帳消費
                 if (data && data.accounting && data.accounting.length > 0) {
                     data.accounting.forEach(row => {
                         if (!row || row.length < 3) return;
                         let amount = Number(row) || 0;
                         let payType = row ? row.toString().trim() : "現金/常規";
-                        if (payType in sums) {
-                            sums[payType] += amount;
-                        }
+                        if (payType in sums) { sums[payType] += amount; }
                     });
 
-                    // 刷新方塊金額
-                    if (data.payments) {
-                        data.payments.forEach((p, index) => {
-                            let name = p && p ? p.toString().trim() : "";
-                            let el = document.getElementById(`box-${index}`);
-                            if (el && name in sums) el.innerText = `$${sums[name]}`;
-                        });
-                    }
+                    Object.keys(sums).forEach(name => {
+                        let safeId = getSafeId(name);
+                        let el = document.getElementById(safeId);
+                        if (el) el.innerText = `$${sums[name]}`;
+                    });
 
-                    // 3. 渲染最近 10 筆紀錄
+                    // 渲染記帳表格
                     accBody.innerHTML = '';
                     let renderRows = [...data.accounting].reverse().slice(0, 10);
                     renderRows.forEach(row => {
@@ -128,14 +175,26 @@
                 } else {
                     accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無歷史記帳資料</td></tr>';
                 }
-            }).catch(err => {
-                console.log(err);
-            });
+
+                // 3. 渲染提醒記事表格 (功能回歸！)
+                if (data && data.reminders && data.reminders.length > 0) {
+                    remBody.innerHTML = '';
+                    let renderRem = [...data.reminders].reverse().slice(0, 10);
+                    renderRem.forEach(row => {
+                        let date = row ? new Date(row).toLocaleDateString() : '無時間';
+                        remBody.innerHTML += `<tr><td>${date}</td><td>${row||'無內容'}</td><td>${row||'無時間'}</td><td>${row||'未完成'}</td></tr>`;
+                    });
+                } else {
+                    remBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暫無提醒記事事項</td></tr>';
+                }
+            }).catch(err => { console.log(err); });
         }
 
         function clearInputs() {
             document.getElementById('accItem').value = '';
             document.getElementById('accAmount').value = '';
+            document.getElementById('remContent').value = '';
+            document.getElementById('remTime').value = '';
         }
 
         window.onload = fetchData;
