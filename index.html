@@ -42,12 +42,9 @@
                 <option value="娛樂">娛樂</option>
                 <option value="其他">其他</option>
             </select>
+            <!-- 這裡變成動態載入的下拉選單 -->
             <select id="accPayment">
-                <option value="現金/不統計">現金/常規</option>
-                <option value="街口支付/匯豐">街口支付/匯豐 (10日結)</option>
-                <option value="街口支付/玉山">街口支付/玉山 (10日結)</option>
-                <option value="LINEPAY/玉山">LINEPAY/玉山 (10日結)</option>
-                <option value="LINEPAY/樂天">LINEPAY/樂天 (20日結)</option>
+                <option value="">載入支付方式中...</option>
             </select>
             <button onclick="sendAccounting()">送出記帳</button>
         </div>
@@ -60,15 +57,12 @@
         </div>
     </div>
 
-    <!-- 即時帳單統計區塊 -->
+    <!-- 動態應付帳單統計區塊 -->
     <div class="card">
         <h3>💳 當期應付帳單預估</h3>
-        <p style="font-size:12px; color:#666; margin:0;">根據您的結帳日，自動篩選並計算目前尚未繳費的累積消費：</p>
-        <div class="stat-box">
-            <div class="stat-item">街口/匯豐 <span class="stat-amount" id="sum-jk-hsbc">\$0</span></div>
-            <div class="stat-item">街口/玉山 <span class="stat-amount" id="sum-jk-esun">\$0</span></div>
-            <div class="stat-item">LINEPAY/玉山 <span class="stat-amount" id="sum-lp-esun">\$0</span></div>
-            <div class="stat-item">LINEPAY/樂天 <span class="stat-amount" id="sum-lp-rk">\$0</span></div>
+        <p style="font-size:12px; color:#666; margin:0;">根據您在試算表設定的結帳日自動計算：</p>
+        <div class="stat-box" id="billingDashboard">
+            <!-- 這裡會根據試算表卡片清單自動長出來 -->
         </div>
     </div>
 
@@ -88,6 +82,9 @@
 
     <script>
         const API_URL = "https://google.com";
+        
+        // 全局儲存支付方式與結帳日的對照表
+        let paymentRules = {}; 
 
         function switchForm(type) {
             if(type === 'acc') {
@@ -106,14 +103,15 @@
         function sendAccounting() {
             const item = document.getElementById('accItem').value;
             const amount = document.getElementById('accAmount').value;
-            if(!item || !amount) return alert('請填寫完整項目與金額');
+            const payment = document.getElementById('accPayment').value;
+            if(!item || !amount || !payment) return alert('請填寫完整欄位');
             
             const data = {
                 type: "accounting",
                 item: item,
                 amount: Number(amount),
                 category: document.getElementById('accCategory').value,
-                payment: document.getElementById('accPayment').value
+                payment: payment
             };
             
             fetch(API_URL, { method: "POST", body: JSON.stringify(data) })
@@ -121,24 +119,19 @@
             .then(res => { alert(res.message); clearInputs(); fetchData(); });
         }
 
-        // 判斷消費日期是否在該卡當前的帳單週期內
         function isCurrentBillingCycle(consumeDateStr, closingDay) {
+            if (!closingDay || closingDay === 0) return false; // 0日不統計帳單
             let now = new Date();
             let consumeDate = new Date(consumeDateStr);
-            
             let currentBillingStart, currentBillingEnd;
             
             if (now.getDate() > closingDay) {
-                // 如果今天已經過了本月的結帳日，代表當前帳期是「本月結帳日隔天」到「下個月結帳日」
                 currentBillingStart = new Date(now.getFullYear(), now.getMonth(), closingDay + 1);
                 currentBillingEnd = new Date(now.getFullYear(), now.getMonth() + 1, closingDay);
             } else {
-                // 如果今天還沒過本月結帳日，代表當前帳期是「上個月結帳日隔天」到「本月結帳日」
                 currentBillingStart = new Date(now.getFullYear(), now.getMonth() - 1, closingDay + 1);
                 currentBillingEnd = new Date(now.getFullYear(), now.getMonth(), closingDay);
             }
-            
-            // 去除時分秒誤差，純比較日期
             currentBillingStart.setHours(0,0,0,0);
             currentBillingEnd.setHours(23,59,59,999);
             
@@ -149,39 +142,68 @@
             fetch(API_URL)
             .then(res => res.json())
             .then(data => {
-                let sums = { "街口支付/匯豐": 0, "街口支付/玉山": 0, "LINEPAY/玉山": 0, "LINEPAY/樂天": 0 };
+                // 1. 先處理動態支付選項與看板初始化
+                const paySelect = document.getElementById('accPayment');
+                const dashboard = document.getElementById('billingDashboard');
+                paySelect.innerHTML = '';
+                dashboard.innerHTML = '';
+                paymentRules = {};
+                let sums = {};
 
+                if (data.payments && data.payments.length) {
+                    data.payments.forEach(p => {
+                        let name = p[0];
+                        let closingDay = Number(p[1]);
+                        paymentRules[name] = closingDay; // 記錄規則
+
+                        // 加進下拉選單
+                        let optText = closingDay > 0 ? `${name} (${closingDay}日結)` : name;
+                        paySelect.innerHTML += `<option value="${name}">${optText}</option>`;
+
+                        // 如果需要統計，在看板建立格子
+                        if (closingDay > 0) {
+                            sums[name] = 0;
+                            dashboard.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="sum-${btoa(name).replace(/=/g,'')}">$0</span></div>`;
+                        }
+                    });
+                } else {
+                    paySelect.innerHTML = '<option value="現金/不統計">現金/不統計</option>';
+                }
+
+                // 2. 處理記帳花費統計
                 const accBody = document.querySelector('#accTable tbody');
                 accBody.innerHTML = data.accounting.length ? '' : '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
                 
-                // 處理所有歷史記帳
                 data.accounting.forEach(row => {
                     let dateStr = row[0];
                     let amount = Number(row[2]);
                     let paymentType = row[4] || "現金/不統計";
 
-                    // 依結帳日統計金額
                     if (paymentType in sums) {
-                        let closingDay = paymentType.includes("樂天") ? 20 : 10; // 樂天20日結，其餘10日結
+                        let closingDay = paymentRules[paymentType];
                         if (isCurrentBillingCycle(dateStr, closingDay)) {
                             sums[paymentType] += amount;
                         }
                     }
                 });
 
-                // 更新即時統計面板
-                document.getElementById('sum-jk-hsbc').innerText = `$${sums["街口支付/匯豐"]}`;
-                document.getElementById('sum-jk-esun').innerText = `$${sums["街口支付/玉山"]}`;
-                document.getElementById('sum-lp-esun').innerText = `$${sums["LINEPAY/玉山"]}`;
-                document.getElementById('sum-lp-rk').innerText = `$${sums["LINEPAY/樂天"]}`;
+                // 更新動態看板金額
+                Object.keys(sums).forEach(name => {
+                    let id = `sum-${btoa(name).replace(/=/g,'')}`;
+                    let element = document.getElementById(id);
+                    if (element) element.innerText = `$${sums[name]}`;
+                });
 
-                // 渲染最近 10 筆明細表格
+                // 3. 渲染最近 10 筆明細表格
                 data.accounting.reverse().slice(0, 10).forEach(row => {
                     let date = new Date(row[0]).toLocaleDateString();
                     let paymentType = row[4] || "現金/不統計";
                     accBody.innerHTML += `<tr><td>${date}</td><td>${row[1]}</td><td>$${row[2]}</td><td>${row[3]}</td><td>${paymentType}</td></tr>`;
                 });
-            }).catch(err => console.error(err));
+            }).catch(err => {
+                console.error(err);
+                alert('資料載入失敗，請確認試算表分頁設定！');
+            });
         }
 
         function clearInputs() {
