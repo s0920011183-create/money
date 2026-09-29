@@ -24,7 +24,7 @@
 
     <!-- 輸入區塊 -->
     <div class="card">
-        <h3>💰 我要來記帳</h3>
+        <h3>💰 我要去記帳</h3>
         <input type="text" id="accItem" placeholder="項目（例：午餐）">
         <input type="number" id="accAmount" placeholder="金額">
         <select id="accCategory">
@@ -33,12 +33,9 @@
             <option value="娛樂">娛樂</option>
             <option value="其他">其他</option>
         </select>
+        <!-- 下拉選單改為由 Google 試算表動態生成 -->
         <select id="accPayment">
-            <option value="現金/常規">現金/常規</option>
-            <option value="街口支付/匯豐">街口支付/匯豐</option>
-            <option value="街口支付/玉山">街口支付/玉山</option>
-            <option value="LINEPAY/玉山">LINEPAY/玉山</option>
-            <option value="LINEPAY/樂天">LINEPAY/樂天</option>
+            <option value="">正在從雲端載入支付方式...</option>
         </select>
         <button onclick="sendAccounting()">送出記帳</button>
     </div>
@@ -46,11 +43,9 @@
     <!-- 應付帳單統計區塊 -->
     <div class="card">
         <h3>💳 各支付方式累積金額統計</h3>
-        <div class="stat-box">
-            <div class="stat-item">街口/匯豐 <span class="stat-amount" id="sum-hsbc">\$0</span></div>
-            <div class="stat-item">街口/玉山 <span class="stat-amount" id="sum-esun">\$0</span></div>
-            <div class="stat-item">LINEPAY/玉山 <span class="stat-amount" id="sum-lpesun">\$0</span></div>
-            <div class="stat-item">LINEPAY/樂天 <span class="stat-amount" id="sum-lprk">\$0</span></div>
+        <!-- 看板外殼保留，裡面的方塊改為由 Google 試算表動態生成 -->
+        <div class="stat-box" id="dynamic-stat-box">
+            <div style="color: gray; font-size: 14px;">正在載入統計面板...</div>
         </div>
     </div>
 
@@ -72,14 +67,15 @@
         function sendAccounting() {
             const item = document.getElementById('accItem').value;
             const amount = document.getElementById('accAmount').value;
-            if(!item || !amount) return alert('請填寫完整項目與金額');
+            const payment = document.getElementById('accPayment').value;
+            if(!item || !amount || !payment) return alert('請填寫完整記帳資訊');
             
             const data = {
                 type: "accounting",
                 item: item,
                 amount: Number(amount),
                 category: document.getElementById('accCategory').value,
-                payment: document.getElementById('accPayment').value
+                payment: payment
             };
             
             fetch(API_URL, { method: "POST", body: JSON.stringify(data) })
@@ -91,10 +87,38 @@
             fetch(API_URL)
             .then(res => res.json())
             .then(data => {
-                let sums = { "街口支付/匯豐": 0, "街口支付/玉山": 0, "LINEPAY/玉山": 0, "LINEPAY/樂天": 0 };
+                const paySelect = document.getElementById('accPayment');
+                const statBox = document.getElementById('dynamic-stat-box');
                 const accBody = document.querySelector('#accTable tbody');
                 
-                // 1. 安全檢查：如果根本沒讀到記帳陣列，直接顯示暫無資料
+                let sums = {};
+                paySelect.innerHTML = '';
+                statBox.innerHTML = '';
+
+                // 1. 動態讀取 Payments 分頁，自動長出選單跟方塊
+                if (data && data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
+                    data.payments.forEach(p => {
+                        if (!Array.isArray(p) || p.length === 0) return;
+                        let cardName = p[0] ? p[0].toString().trim() : "";
+                        if (cardName === "") return;
+
+                        // 初始化金額與加入下拉選單
+                        sums[cardName] = 0;
+                        paySelect.innerHTML += `<option value="${cardName}">${cardName}</option>`;
+
+                        // 自動在網頁上建立該卡片的精美統計方塊（給予安全的特殊 ID）
+                        let safeId = "card-" + btoa(unescape(encodeURIComponent(cardName))).replace(/=/g, '');
+                        statBox.innerHTML += `<div class="stat-item">${cardName} <span class="stat-amount" id="${safeId}">$0</span></div>`;
+                    });
+                }
+
+                // 防呆：如果雲端沒設定卡片，補上常規預設值
+                if (paySelect.innerHTML === '') {
+                    paySelect.innerHTML = '<option value="現金/常規">現金/常規</option>';
+                    statBox.innerHTML = '<div style="color:gray; font-size:14px;">暫無卡片統計統計</div>';
+                }
+
+                // 2. 安全檢查記帳明細
                 if (!data || !data.accounting || !Array.isArray(data.accounting) || data.accounting.length === 0) {
                     accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
                     return;
@@ -102,47 +126,39 @@
                 
                 accBody.innerHTML = '';
                 
-                // 2. 超安全解析每一行記帳資料（逐欄安全檢查防崩潰）
+                // 3. 統計歷史金額
                 data.accounting.forEach(row => {
-                    if (!Array.isArray(row)) return;
-                    
-                    // 檢查陣列長度，避免因為舊測試資料缺少「支付方式」欄位而報錯
+                    if (!Array.isArray(row) || row.length === 0) return;
                     let amount = row.length > 2 ? (Number(row[2]) || 0) : 0;
-                    let paymentType = row.length > 4 ? (row[4] || "現金/常規") : "現金/常規";
-                    
-                    if (typeof paymentType === 'string') {
-                        paymentType = paymentType.trim();
-                    }
+                    let paymentType = row.length > 4 ? (row[4] ? row[4].toString().trim() : "現金/常規") : "現金/常規";
                     
                     if (paymentType in sums) {
                         sums[paymentType] += amount;
                     }
                 });
 
-                // 更新看板
-                document.getElementById('sum-hsbc').innerText = `$${sums["街口支付/匯豐"]}`;
-                document.getElementById('sum-esun').innerText = `$${sums["街口支付/玉山"]}`;
-                document.getElementById('sum-lpesun').innerText = `$${sums["LINEPAY/玉山"]}`;
-                document.getElementById('sum-lprk').innerText = `$${sums["LINEPAY/樂天"]}`;
+                // 將計算完的總金額，動態刷新到剛剛自動長出來的方塊裡
+                Object.keys(sums).forEach(cardName => {
+                    let safeId = "card-" + btoa(unescape(encodeURIComponent(cardName))).replace(/=/g, '');
+                    let element = document.getElementById(safeId);
+                    if (element) element.innerText = `$${sums[cardName]}`;
+                });
 
-                // 3. 安全渲染最新的 10 筆明細表格
+                // 4. 顯示明細表格
                 let renderRows = [...data.accounting].reverse().slice(0, 10);
                 renderRows.forEach(row => {
                     if (!Array.isArray(row)) return;
-                    
                     let date = row[0] ? new Date(row[0]).toLocaleDateString() : '無時間';
                     let item = row[1] || '未命名';
                     let amount = row[2] || 0;
                     let cat = row[3] || '其他';
                     let pay = row[4] || '現金/常規';
-                    
                     accBody.innerHTML += `<tr><td>${date}</td><td>${item}</td><td>$${amount}</td><td>${cat}</td><td>${pay}</td></tr>`;
                 });
             }).catch(err => {
-                // 如果真的又進來這裡，在控制台印出最詳細的報告，但「不彈出阻擋視窗」
-                console.error("詳細解析錯誤原因報告:", err);
+                console.error("解析報告:", err);
                 const accBody = document.querySelector('#accTable tbody');
-                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">資料格式不相容，請嘗試送出新的一筆記帳來刷新結構。</td></tr>';
+                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">資料讀取中，或請嘗試送出一筆新記帳。</td></tr>';
             });
         }
 
