@@ -24,7 +24,7 @@
 
     <!-- 輸入區塊 -->
     <div class="card">
-        <h3>💰 我要去記帳</h3>
+        <h3>💰 我要記帳</h3>
         <input type="text" id="accItem" placeholder="項目（例：午餐）">
         <input type="number" id="accAmount" placeholder="金額">
         <select id="accCategory">
@@ -33,7 +33,6 @@
             <option value="娛樂">娛樂</option>
             <option value="其他">其他</option>
         </select>
-        <!-- 下拉選單改為由 Google 試算表動態生成 -->
         <select id="accPayment">
             <option value="">正在從雲端載入支付方式...</option>
         </select>
@@ -43,7 +42,6 @@
     <!-- 應付帳單統計區塊 -->
     <div class="card">
         <h3>💳 各支付方式累積金額統計</h3>
-        <!-- 看板外殼保留，裡面的方塊改為由 Google 試算表動態生成 -->
         <div class="stat-box" id="dynamic-stat-box">
             <div style="color: gray; font-size: 14px;">正在載入統計面板...</div>
         </div>
@@ -83,6 +81,17 @@
             .then(res => { alert(res.message); clearInputs(); fetchData(); });
         }
 
+        // 安全的中文字串轉 ID 函數（替代崩潰的 btoa）
+        function getSafeId(str) {
+            let s = String(str).trim();
+            let hash = 0;
+            for (let i = 0; i < s.length; i++) {
+                hash = (hash << 5) - hash + s.charCodeAt(i);
+                hash |= 0;
+            }
+            return "card-" + Math.abs(hash);
+        }
+
         function fetchData() {
             fetch(API_URL)
             .then(res => res.json())
@@ -95,30 +104,28 @@
                 paySelect.innerHTML = '';
                 statBox.innerHTML = '';
 
-                // 1. 動態讀取 Payments 分頁，自動長出選單跟方塊
+                // 1. 動態讀取 Payments 分頁
                 if (data && data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
                     data.payments.forEach(p => {
                         if (!Array.isArray(p) || p.length === 0) return;
                         let cardName = p[0] ? p[0].toString().trim() : "";
                         if (cardName === "") return;
 
-                        // 初始化金額與加入下拉選單
                         sums[cardName] = 0;
                         paySelect.innerHTML += `<option value="${cardName}">${cardName}</option>`;
 
-                        // 自動在網頁上建立該卡片的精美統計方塊（給予安全的特殊 ID）
-                        let safeId = "card-" + btoa(unescape(encodeURIComponent(cardName))).replace(/=/g, '');
+                        // 使用全新開發的支援中文安全 ID
+                        let safeId = getSafeId(cardName);
                         statBox.innerHTML += `<div class="stat-item">${cardName} <span class="stat-amount" id="${safeId}">$0</span></div>`;
                     });
                 }
 
-                // 防呆：如果雲端沒設定卡片，補上常規預設值
                 if (paySelect.innerHTML === '') {
                     paySelect.innerHTML = '<option value="現金/常規">現金/常規</option>';
-                    statBox.innerHTML = '<div style="color:gray; font-size:14px;">暫無卡片統計統計</div>';
+                    statBox.innerHTML = '<div style="color:gray; font-size:14px;">暫無卡片統計</div>';
                 }
 
-                // 2. 安全檢查記帳明細
+                // 2. 檢查並顯示記帳明細
                 if (!data || !data.accounting || !Array.isArray(data.accounting) || data.accounting.length === 0) {
                     accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
                     return;
@@ -137,14 +144,14 @@
                     }
                 });
 
-                // 將計算完的總金額，動態刷新到剛剛自動長出來的方塊裡
+                // 4. 將總金額動態刷入獨立 ID 方塊中
                 Object.keys(sums).forEach(cardName => {
-                    let safeId = "card-" + btoa(unescape(encodeURIComponent(cardName))).replace(/=/g, '');
+                    let safeId = getSafeId(cardName);
                     let element = document.getElementById(safeId);
                     if (element) element.innerText = `$${sums[cardName]}`;
                 });
 
-                // 4. 顯示明細表格
+                // 5. 顯示明細表格
                 let renderRows = [...data.accounting].reverse().slice(0, 10);
                 renderRows.forEach(row => {
                     if (!Array.isArray(row)) return;
@@ -158,7 +165,7 @@
             }).catch(err => {
                 console.error("解析報告:", err);
                 const accBody = document.querySelector('#accTable tbody');
-                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">資料讀取中，或請嘗試送出一筆新記帳。</td></tr>';
+                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">雲端連線異常，請確認試算表格式或稍後再試。</td></tr>';
             });
         }
 
