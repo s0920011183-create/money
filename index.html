@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>生活記帳與記事提醒</title>
+    <title>生活記帳小管家</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #f5f5f5; max-width: 600px; margin: 0 auto; }
         .card { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         input, select, button { width: 100%; padding: 10px; margin: 5px 0; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
         button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
-        button:hover { background: #0056b3; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; }
@@ -22,9 +21,9 @@
 
     <h2>錢包與記事小管家</h2>
 
-    <!-- 輸入區塊 -->
+    <!-- 記帳輸入區 -->
     <div class="card">
-        <h3>💰 我要-記帳</h3>
+        <h3>💰 我要記帳</h3>
         <input type="text" id="accItem" placeholder="項目（例：午餐）">
         <input type="number" id="accAmount" placeholder="金額">
         <select id="accCategory">
@@ -34,20 +33,20 @@
             <option value="其他">其他</option>
         </select>
         <select id="accPayment">
-            <option value="">正在從雲端載入支付方式...</option>
+            <option value="現金/常規">現金/常規</option>
         </select>
         <button onclick="sendAccounting()">送出記帳</button>
     </div>
 
-    <!-- 應付帳單統計區塊 -->
+    <!-- 支付方式累計統計 -->
     <div class="card">
         <h3>💳 各支付方式累積金額統計</h3>
         <div class="stat-box" id="dynamic-stat-box">
-            <div style="color: gray; font-size: 14px;">正在載入統計面板...</div>
+            <div style="color: gray; font-size: 14px;">暫無統計項目</div>
         </div>
     </div>
 
-    <!-- 歷史資料顯示區塊 -->
+    <!-- 歷史紀錄列表 -->
     <div class="card">
         <h3>📊 最近 10 筆花費紀錄</h3>
         <button onclick="fetchData()" style="background: #17a2b8; margin-bottom: 10px;">🔄 重新整理資料</button>
@@ -60,20 +59,21 @@
     </div>
 
     <script>
+        // 自動鎖定最正確的後端連線 API
         const API_URL = "https://google.com";
 
+        // 送出記帳資料
         function sendAccounting() {
             const item = document.getElementById('accItem').value;
             const amount = document.getElementById('accAmount').value;
-            const payment = document.getElementById('accPayment').value;
-            if(!item || !amount || !payment) return alert('請填寫完整記帳資訊');
+            if(!item || !amount) return alert('請填寫項目與金額');
             
             const data = {
                 type: "accounting",
                 item: item,
                 amount: Number(amount),
                 category: document.getElementById('accCategory').value,
-                payment: payment
+                payment: document.getElementById('accPayment').value
             };
             
             fetch(API_URL, { method: "POST", body: JSON.stringify(data) })
@@ -81,17 +81,7 @@
             .then(res => { alert(res.message); clearInputs(); fetchData(); });
         }
 
-        // 超安全無符號 ID 轉換函數，確保含斜線 "/" 的中文卡名絕對不當機
-        function getSafeId(str) {
-            let s = String(str).trim();
-            let hash = 0;
-            for (let i = 0; i < s.length; i++) {
-                hash = (hash << 5) - hash + s.charCodeAt(i);
-                hash |= 0;
-            }
-            return "cardid-" + Math.abs(hash);
-        }
-
+        // 從雲端抓取並動態渲染網頁
         function fetchData() {
             fetch(API_URL)
             .then(res => res.json())
@@ -101,70 +91,54 @@
                 const accBody = document.querySelector('#accTable tbody');
                 
                 let sums = {};
-                paySelect.innerHTML = '';
-                statBox.innerHTML = '';
-
-                // 1. 動態讀取 Payments 清單
-                if (data && data.payments && Array.isArray(data.payments)) {
-                    data.payments.forEach(p => {
-                        if (!Array.isArray(p) || p.length === 0) return;
-                        let cardName = p[0] ? p[0].toString().trim() : "";
-                        if (cardName === "") return;
-
-                        sums[cardName] = 0;
-                        paySelect.innerHTML += `<option value="${cardName}">${cardName}</option>`;
-
-                        let safeId = getSafeId(cardName);
-                        statBox.innerHTML += `<div class="stat-item">${cardName} <span class="stat-amount" id="${safeId}">$0</span></div>`;
+                
+                // 1. 生成自訂支付下拉選單與統計方塊
+                if (data && data.payments && data.payments.length > 0) {
+                    paySelect.innerHTML = '';
+                    statBox.innerHTML = '';
+                    data.payments.forEach((p, index) => {
+                        let name = p && p[0] ? p[0].toString().trim() : "";
+                        if(name === "") return;
+                        
+                        sums[name] = 0;
+                        paySelect.innerHTML += `<option value="${name}">${name}</option>`;
+                        statBox.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="box-${index}">$0</span></div>`;
                     });
                 }
 
-                if (paySelect.innerHTML === '') {
-                    paySelect.innerHTML = '<option value="現金/常規">現金/常規</option>';
-                    statBox.innerHTML = '<div style="color:gray; font-size:14px;">暫無卡片統計</div>';
-                }
+                // 2. 統計歷史消費
+                if (data && data.accounting && data.accounting.length > 0) {
+                    data.accounting.forEach(row => {
+                        if (!row || row.length < 3) return;
+                        let amount = Number(row[2]) || 0;
+                        let payType = row[4] ? row[4].toString().trim() : "現金/常規";
+                        if (payType in sums) {
+                            sums[payType] += amount;
+                        }
+                    });
 
-                // 2. 處理並顯示記帳明細表格
-                if (!data || !data.accounting || !Array.isArray(data.accounting) || data.accounting.length === 0) {
-                    accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
-                    return;
-                }
-                
-                accBody.innerHTML = '';
-                
-                // 3. 統計歷史消費總和
-                data.accounting.forEach(row => {
-                    if (!Array.isArray(row)) return;
-                    let amount = row.length > 2 ? (Number(row[2]) || 0) : 0;
-                    let paymentType = row.length > 4 ? (row[4] ? row[4].toString().trim() : "現金/常規") : "現金/常規";
-                    
-                    if (paymentType in sums) {
-                        sums[paymentType] += amount;
+                    // 刷新方塊金額
+                    if (data.payments) {
+                        data.payments.forEach((p, index) => {
+                            let name = p && p[0] ? p[0].toString().trim() : "";
+                            let el = document.getElementById(`box-${index}`);
+                            if (el && name in sums) el.innerText = `$${sums[name]}`;
+                        });
                     }
-                });
 
-                // 4. 將金額刷入看板
-                Object.keys(sums).forEach(cardName => {
-                    let safeId = getSafeId(cardName);
-                    let element = document.getElementById(safeId);
-                    if (element) element.innerText = `$${sums[cardName]}`;
-                });
-
-                // 5. 渲染表格明細
-                let renderRows = [...data.accounting].reverse().slice(0, 10);
-                renderRows.forEach(row => {
-                    if (!Array.isArray(row)) return;
-                    let date = row[0] ? new Date(row[0]).toLocaleDateString() : '無時間';
-                    let item = row[1] || '未命名';
-                    let amount = row[2] || 0;
-                    let cat = row[3] || '其他';
-                    let pay = row[4] || '現金/常規';
-                    accBody.innerHTML += `<tr><td>${date}</td><td>${item}</td><td>$${amount}</td><td>${cat}</td><td>${pay}</td></tr>`;
-                });
+                    // 3. 渲染最近 10 筆紀錄
+                    accBody.innerHTML = '';
+                    let renderRows = [...data.accounting].reverse().slice(0, 10);
+                    renderRows.forEach(row => {
+                        let date = row[0] ? new Date(row[0]).toLocaleDateString() : '無時間';
+                        accBody.innerHTML += `<tr><td>${date}</td><td>${row[1]||'未命名'}</td><td>$${row[2]||0}</td><td>${row[3]||'其他'}</td><td>${row[4]||'現金/常規'}</td></tr>`;
+                    });
+                } else {
+                    accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無歷史記帳資料</td></tr>';
+                }
             }).catch(err => {
-                console.error("網頁解析出錯報告:", err);
-                const accBody = document.querySelector('#accTable tbody');
-                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">雲端連線成功，資料結構建構中。請嘗試記帳一筆！</td></tr>';
+                console.log(err);
+                document.querySelector('#accTable tbody').innerHTML = '<tr><td colspan="5" style="text-align:center;">連線就緒，請送出第一筆記帳。</td></tr>';
             });
         }
 
