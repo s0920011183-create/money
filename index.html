@@ -26,16 +26,16 @@
     <h2>錢包與記事小管家</h2>
 
     <!-- 傳輸專用隱形管道 -->
-    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted){alert('資料已成功推送到雲端！請等待約3秒後手動點擊下方重新整理按鈕。');clearInputs();submitted=false;fetchData();}"></iframe>
+    <iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(submitted){alert('資料已成功同步至雲端！');clearInputs();submitted=false;fetchData();}"></iframe>
 
     <div class="card">
-        <!-- 核心功能分頁 -->
+        <!-- 頁籤切換 -->
         <div class="tabs">
             <button class="tab-btn active" id="btnAcc" onclick="switchForm('acc')">💰 我要記帳</button>
             <button class="tab-btn" id="btnRem" onclick="switchForm('rem')">⏰ 記事提醒</button>
         </div>
 
-        <!-- 表單：我要記帳（第 39 行已修正正確網址） -->
+        <!-- 表單一：我要記帳 -->
         <form id="accForm" action="https://script.google.com/macros/s/AKfycbxmPpAw6_1ASJeaXRFH9wPQ36Ywc0nWVYpUlXD2CQVQa49Pk_SjNqxsvG1wNkkGy8KlMw/exec" method="POST" target="hidden_iframe" onsubmit="submitted=true;">
             <input type="hidden" name="type" value="accounting">
             <input type="text" name="item" id="accItem" placeholder="項目（例：午餐）" required>
@@ -56,7 +56,7 @@
             <button type="submit">送出記帳</button>
         </form>
 
-        <!-- 表單：記事提醒（第 59 行已修正正確網址） -->
+        <!-- 表單二：記事提醒（修正欄位對應與送出機制） -->
         <form id="remForm" action="https://script.google.com/macros/s/AKfycbxmPpAw6_1ASJeaXRFH9wPQ36Ywc0nWVYpUlXD2CQVQa49Pk_SjNqxsvG1wNkkGy8KlMw/exec" method="POST" target="hidden_iframe" onsubmit="submitted=true;" style="display:none;">
             <input type="hidden" name="type" value="reminder">
             <input type="text" name="content" id="remContent" placeholder="提醒內容（例：繳電費）" required>
@@ -65,18 +65,19 @@
         </form>
     </div>
 
-    <!-- 各支付累積金額統計 -->
+    <!-- 支付方式當期帳單累積統計（結帳日精密計算） -->
     <div class="card">
-        <h3>💳 各支付方式累積金額統計</h3>
+        <h3>💳 各支付方式當期累積金額</h3>
+        <p style="font-size: 11px; color: gray; margin: 0 0 10px 0;">(依結帳日自動篩選目前尚未繳費的當期花費)</p>
         <div class="stat-box" id="dynamic-stat-box">
-            <div class="stat-item">街口/匯豐 <span class="stat-amount" id="sum-box-0">$0</span></div>
-            <div class="stat-item">街口/玉山 <span class="stat-amount" id="sum-box-1">$0</span></div>
-            <div class="stat-item">LINEPAY/玉山 <span class="stat-amount" id="sum-box-2">$0</span></div>
-            <div class="stat-item">LINEPAY/樂天 <span class="stat-amount" id="sum-box-3">$0</span></div>
+            <div class="stat-item">街口支付/匯豐 <span class="stat-amount" id="sum-jk-hsbc">$0</span></div>
+            <div class="stat-item">街口支付/玉山 <span class="stat-amount" id="sum-jk-esun">$0</span></div>
+            <div class="stat-item">LINEPAY/玉山 <span class="stat-amount" id="sum-lp-esun">$0</span></div>
+            <div class="stat-item">LINEPAY/樂天 <span class="stat-amount" id="sum-lp-rk">$0</span></div>
         </div>
     </div>
 
-    <!-- 歷史花費與待辦提醒列表 -->
+    <!-- 歷史紀錄清單 -->
     <div class="card">
         <h3>📊 歷史紀錄與待辦事項</h3>
         <button onclick="fetchData()" style="background: #17a2b8; margin-bottom: 10px;">🔄 重新整理資料</button>
@@ -116,14 +117,27 @@
             }
         }
 
-        function getSafeId(str) {
-            let s = String(str).trim();
-            let hash = 0;
-            for (let i = 0; i < s.length; i++) {
-                hash = (hash << 5) - hash + s.charCodeAt(i);
-                hash |= 0;
+        // 精準判斷消費日期是否落在當前的卡片帳單帳期內
+        function isCurrentBillingCycle(consumeDateStr, closingDay) {
+            if (!closingDay || closingDay === 0) return false;
+            let now = new Date();
+            let consumeDate = new Date(consumeDateStr);
+            if (isNaN(consumeDate.getTime())) return false;
+            
+            let currentBillingStart, currentBillingEnd;
+            if (now.getDate() > closingDay) {
+                // 已過本月結帳日：本月結帳隔天 ~ 下月結帳日
+                currentBillingStart = new Date(now.getFullYear(), now.getMonth(), closingDay + 1);
+                currentBillingEnd = new Date(now.getFullYear(), now.getMonth() + 1, closingDay);
+            } else {
+                // 未過本月結帳日：上月結帳隔天 ~ 本月結帳日
+                currentBillingStart = new Date(now.getFullYear(), now.getMonth() - 1, closingDay + 1);
+                currentBillingEnd = new Date(now.getFullYear(), now.getMonth(), closingDay);
             }
-            return "boxid-" + Math.abs(hash);
+            currentBillingStart.setHours(0,0,0,0);
+            currentBillingEnd.setHours(23,59,59,999);
+            
+            return consumeDate >= currentBillingStart && consumeDate <= currentBillingEnd;
         }
 
         function fetchData() {
@@ -131,30 +145,41 @@
             .then(res => res.json())
             .then(data => {
                 const paySelect = document.getElementById('accPayment');
-                const statBox = document.getElementById('dynamic-stat-box');
                 const accBody = document.querySelector('#accTable tbody');
                 const remBody = document.querySelector('#remTable tbody');
                 
+                // 固定初始化的 4 張核心卡片與預設週期規則
                 let sums = { "街口支付/匯豐": 0, "街口支付/玉山": 0, "LINEPAY/玉山": 0, "LINEPAY/樂天": 0 };
-                
-                // 1. 動態加載卡片清單（保底清單同時存在）
-                if (data && data.payments && data.payments.length > 0) {
-                    paySelect.innerHTML = '';
-                    statBox.innerHTML = '';
-                    sums = {};
+                let paymentRules = { "街口支付/匯豐": 10, "街口支付/玉山": 10, "LINEPAY/玉山": 10, "LINEPAY/樂天": 20 };
+
+                // 1. 動態加載雲端 Payments 覆蓋（若有設定）
+                if (data && data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
+                    let hasValidPayments = false;
+                    let tempSelectHTML = "";
+                    let tempSums = {};
+                    let tempRules = {};
+
                     data.payments.forEach(p => {
-                        let name = p && p ? p.toString().trim() : "";
+                        if (!Array.isArray(p) || p.length === 0) return;
+                        let name = p[0] ? p[0].toString().trim() : "";
+                        let day = p[1] ? Number(p[1]) : 0;
                         if(name === "") return;
                         
-                        sums[name] = 0;
-                        paySelect.innerHTML += `<option value="${name}">${name}</option>`;
-                        let safeId = getSafeId(name);
-                        statBox.innerHTML += `<div class="stat-item">${name} <span class="stat-amount" id="${safeId}">$0</span></div>`;
+                        hasValidPayments = true;
+                        tempSelectHTML += `<option value="${name}">${name}</option>`;
+                        tempRules[name] = day;
+                        if (day > 0) { tempSums[name] = 0; }
                     });
+
+                    if (hasValidPayments) {
+                        paySelect.innerHTML = tempSelectHTML;
+                        sums = tempSums;
+                        paymentRules = tempRules;
+                    }
                 }
 
+                // 保底下拉選單機制：如果 Payments 分頁是空的，就採用常規固定選單
                 if (paySelect.innerHTML === '') {
-                    // 若雲端尚未加載完成，顯示固定選單
                     paySelect.innerHTML = `
                         <option value="現金/常規">現金/常規</option>
                         <option value="街口支付/匯豐">街口支付/匯豐</option>
@@ -164,33 +189,6 @@
                     `;
                 }
 
-                // 2. 統計記帳消費
-                if (data && data.accounting && data.accounting.length > 0) {
+                // 2. 統計歷史記帳花費（嚴格限制在當期帳單週期內）
+                if (data && data.accounting && Array.isArray(data.accounting) && data.accounting.length > 0) {
                     data.accounting.forEach(row => {
-                        if (!row || row.length < 3) return;
-                        let amount = Number(row) || 0;
-                        let payType = row ? row.toString().trim() : "現金/常規";
-                        if (payType in sums) { sums[payType] += amount; }
-                    });
-
-                    // 刷新方塊金額
-                    Object.keys(sums).forEach((name, index) => {
-                        let safeId = getSafeId(name);
-                        let el = document.getElementById(safeId) || document.getElementById(`sum-box-${index}`);
-                        if (el) el.innerText = `$${sums[name]}`;
-                    });
-
-                    // 渲染記帳表格
-                    accBody.innerHTML = '';
-                    let renderRows = [...data.accounting].reverse().slice(0, 10);
-                    renderRows.forEach(row => {
-                        let date = row ? new Date(row).toLocaleDateString() : '無時間';
-                        accBody.innerHTML += `<tr><td>${date}</td><td>${row||'未命名'}</td><td>$${row||0}</td><td>${row||'其他'}</td><td>${row||'現金/常規'}</td></tr>`;
-                    });
-                } else {
-                    accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無歷史記帳資料</td></tr>';
-                }
-
-                // 3. 渲染提醒記事表格
-                if (data && data.reminders && data.reminders.length > 0) {
-                    remBody.innerHTML = '';
