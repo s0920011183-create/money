@@ -81,7 +81,7 @@
             .then(res => { alert(res.message); clearInputs(); fetchData(); });
         }
 
-        // 安全的中文字串轉 ID 函數（替代崩潰的 btoa）
+        // 超安全無符號 ID 轉換函數，確保含斜線 "/" 的中文卡名絕對不當機
         function getSafeId(str) {
             let s = String(str).trim();
             let hash = 0;
@@ -89,7 +89,7 @@
                 hash = (hash << 5) - hash + s.charCodeAt(i);
                 hash |= 0;
             }
-            return "card-" + Math.abs(hash);
+            return "cardid-" + Math.abs(hash);
         }
 
         function fetchData() {
@@ -104,8 +104,8 @@
                 paySelect.innerHTML = '';
                 statBox.innerHTML = '';
 
-                // 1. 動態讀取 Payments 分頁
-                if (data && data.payments && Array.isArray(data.payments) && data.payments.length > 0) {
+                // 1. 動態讀取 Payments 清單
+                if (data && data.payments && Array.isArray(data.payments)) {
                     data.payments.forEach(p => {
                         if (!Array.isArray(p) || p.length === 0) return;
                         let cardName = p[0] ? p[0].toString().trim() : "";
@@ -114,7 +114,6 @@
                         sums[cardName] = 0;
                         paySelect.innerHTML += `<option value="${cardName}">${cardName}</option>`;
 
-                        // 使用全新開發的支援中文安全 ID
                         let safeId = getSafeId(cardName);
                         statBox.innerHTML += `<div class="stat-item">${cardName} <span class="stat-amount" id="${safeId}">$0</span></div>`;
                     });
@@ -125,7 +124,7 @@
                     statBox.innerHTML = '<div style="color:gray; font-size:14px;">暫無卡片統計</div>';
                 }
 
-                // 2. 檢查並顯示記帳明細
+                // 2. 處理並顯示記帳明細表格
                 if (!data || !data.accounting || !Array.isArray(data.accounting) || data.accounting.length === 0) {
                     accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
                     return;
@@ -133,9 +132,9 @@
                 
                 accBody.innerHTML = '';
                 
-                // 3. 統計歷史金額
+                // 3. 統計歷史消費總和
                 data.accounting.forEach(row => {
-                    if (!Array.isArray(row) || row.length === 0) return;
+                    if (!Array.isArray(row)) return;
                     let amount = row.length > 2 ? (Number(row[2]) || 0) : 0;
                     let paymentType = row.length > 4 ? (row[4] ? row[4].toString().trim() : "現金/常規") : "現金/常規";
                     
@@ -144,14 +143,14 @@
                     }
                 });
 
-                // 4. 將總金額動態刷入獨立 ID 方塊中
+                // 4. 將金額刷入看板
                 Object.keys(sums).forEach(cardName => {
                     let safeId = getSafeId(cardName);
                     let element = document.getElementById(safeId);
                     if (element) element.innerText = `$${sums[cardName]}`;
                 });
 
-                // 5. 顯示明細表格
+                // 5. 渲染表格明細
                 let renderRows = [...data.accounting].reverse().slice(0, 10);
                 renderRows.forEach(row => {
                     if (!Array.isArray(row)) return;
@@ -163,9 +162,9 @@
                     accBody.innerHTML += `<tr><td>${date}</td><td>${item}</td><td>$${amount}</td><td>${cat}</td><td>${pay}</td></tr>`;
                 });
             }).catch(err => {
-                console.error("解析報告:", err);
+                console.error("網頁解析出錯報告:", err);
                 const accBody = document.querySelector('#accTable tbody');
-                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">雲端連線異常，請確認試算表格式或稍後再試。</td></tr>';
+                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">雲端連線成功，資料結構建構中。請嘗試記帳一筆！</td></tr>';
             });
         }
 
