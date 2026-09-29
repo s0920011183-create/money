@@ -24,7 +24,7 @@
 
     <!-- 輸入區塊 -->
     <div class="card">
-        <h3>💰 我來記帳</h3>
+        <h3>💰 我要記帳</h3>
         <input type="text" id="accItem" placeholder="項目（例：午餐）">
         <input type="number" id="accAmount" placeholder="金額">
         <select id="accCategory">
@@ -94,40 +94,54 @@
                 let sums = { "街口支付/匯豐": 0, "街口支付/玉山": 0, "LINEPAY/玉山": 0, "LINEPAY/樂天": 0 };
                 const accBody = document.querySelector('#accTable tbody');
                 
-                if (!data.accounting || !data.accounting.length) {
+                // 1. 安全防護：如果資料結構不存在或為空，直接顯示暫無資料
+                if (!data || !data.accounting || !Array.isArray(data.accounting) || data.accounting.length === 0) {
                     accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
                     return;
                 }
                 
                 accBody.innerHTML = '';
                 
-                // 累加所有歷史金額
+                // 2. 超安全解析每一行記帳資料
                 data.accounting.forEach(row => {
-                    let amount = Number(row[2]) || 0;
-                    let paymentType = row[4] || "現金/常規";
+                    // 防呆：確保這一行是陣列，且裡面有內容
+                    if (!Array.isArray(row) || row.length === 0) return;
+                    
+                    let amount = Number(row[2]) || 0; // 欄位 C: 金額
+                    let paymentType = row[4] || "現金/常規"; // 欄位 E: 支付方式
+                    
+                    // 去除前後空白再比對
+                    if (typeof paymentType === 'string') {
+                        paymentType = paymentType.trim();
+                    }
+                    
                     if (paymentType in sums) {
                         sums[paymentType] += amount;
                     }
                 });
 
-                // 更新看板
+                // 更新上方看板
                 document.getElementById('sum-hsbc').innerText = `$${sums["街口支付/匯豐"]}`;
                 document.getElementById('sum-esun').innerText = `$${sums["街口支付/玉山"]}`;
                 document.getElementById('sum-lpesun').innerText = `$${sums["LINEPAY/玉山"]}`;
                 document.getElementById('sum-lprk').innerText = `$${sums["LINEPAY/樂天"]}`;
 
-                // 顯示最新的 10 筆明細
+                // 3. 安全渲染最新的 10 筆明細
                 let renderRows = [...data.accounting].reverse().slice(0, 10);
                 renderRows.forEach(row => {
+                    if (!Array.isArray(row)) return;
+                    
+                    // 安全讀取各欄位，若沒有資料則顯示預設字
                     let date = row[0] ? new Date(row[0]).toLocaleDateString() : '無時間';
                     let item = row[1] || '未命名';
                     let amount = row[2] || 0;
                     let cat = row[3] || '其他';
                     let pay = row[4] || '現金/常規';
+                    
                     accBody.innerHTML += `<tr><td>${date}</td><td>${item}</td><td>$${amount}</td><td>${cat}</td><td>${pay}</td></tr>`;
                 });
             }).catch(err => {
-                console.error(err);
+                console.error("詳細錯誤紀錄:", err);
                 alert('資料解析失敗，請重新整理網頁！');
             });
         }
