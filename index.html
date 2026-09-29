@@ -24,7 +24,7 @@
 
     <!-- 輸入區塊 -->
     <div class="card">
-        <h3>💰 我要記帳</h3>
+        <h3>💰 我要來記帳</h3>
         <input type="text" id="accItem" placeholder="項目（例：午餐）">
         <input type="number" id="accAmount" placeholder="金額">
         <select id="accCategory">
@@ -94,7 +94,7 @@
                 let sums = { "街口支付/匯豐": 0, "街口支付/玉山": 0, "LINEPAY/玉山": 0, "LINEPAY/樂天": 0 };
                 const accBody = document.querySelector('#accTable tbody');
                 
-                // 1. 安全防護：如果資料結構不存在或為空，直接顯示暫無資料
+                // 1. 安全檢查：如果根本沒讀到記帳陣列，直接顯示暫無資料
                 if (!data || !data.accounting || !Array.isArray(data.accounting) || data.accounting.length === 0) {
                     accBody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暫無資料</td></tr>';
                     return;
@@ -102,15 +102,14 @@
                 
                 accBody.innerHTML = '';
                 
-                // 2. 超安全解析每一行記帳資料
+                // 2. 超安全解析每一行記帳資料（逐欄安全檢查防崩潰）
                 data.accounting.forEach(row => {
-                    // 防呆：確保這一行是陣列，且裡面有內容
-                    if (!Array.isArray(row) || row.length === 0) return;
+                    if (!Array.isArray(row)) return;
                     
-                    let amount = Number(row[2]) || 0; // 欄位 C: 金額
-                    let paymentType = row[4] || "現金/常規"; // 欄位 E: 支付方式
+                    // 檢查陣列長度，避免因為舊測試資料缺少「支付方式」欄位而報錯
+                    let amount = row.length > 2 ? (Number(row[2]) || 0) : 0;
+                    let paymentType = row.length > 4 ? (row[4] || "現金/常規") : "現金/常規";
                     
-                    // 去除前後空白再比對
                     if (typeof paymentType === 'string') {
                         paymentType = paymentType.trim();
                     }
@@ -120,18 +119,17 @@
                     }
                 });
 
-                // 更新上方看板
+                // 更新看板
                 document.getElementById('sum-hsbc').innerText = `$${sums["街口支付/匯豐"]}`;
                 document.getElementById('sum-esun').innerText = `$${sums["街口支付/玉山"]}`;
                 document.getElementById('sum-lpesun').innerText = `$${sums["LINEPAY/玉山"]}`;
                 document.getElementById('sum-lprk').innerText = `$${sums["LINEPAY/樂天"]}`;
 
-                // 3. 安全渲染最新的 10 筆明細
+                // 3. 安全渲染最新的 10 筆明細表格
                 let renderRows = [...data.accounting].reverse().slice(0, 10);
                 renderRows.forEach(row => {
                     if (!Array.isArray(row)) return;
                     
-                    // 安全讀取各欄位，若沒有資料則顯示預設字
                     let date = row[0] ? new Date(row[0]).toLocaleDateString() : '無時間';
                     let item = row[1] || '未命名';
                     let amount = row[2] || 0;
@@ -141,8 +139,10 @@
                     accBody.innerHTML += `<tr><td>${date}</td><td>${item}</td><td>$${amount}</td><td>${cat}</td><td>${pay}</td></tr>`;
                 });
             }).catch(err => {
-                console.error("詳細錯誤紀錄:", err);
-                alert('資料解析失敗，請重新整理網頁！');
+                // 如果真的又進來這裡，在控制台印出最詳細的報告，但「不彈出阻擋視窗」
+                console.error("詳細解析錯誤原因報告:", err);
+                const accBody = document.querySelector('#accTable tbody');
+                if(accBody) accBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:gray;">資料格式不相容，請嘗試送出新的一筆記帳來刷新結構。</td></tr>';
             });
         }
 
